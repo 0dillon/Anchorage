@@ -15,6 +15,20 @@ The Go SDK ships the protocol primitives but no service around them. Python has
 django-polaris, PHP has the Argo Navis SDK, Java has SDF's Anchor Platform. Go has primitives
 and a gap. This fills the gap.
 
+### README
+
+The README leads with the concrete, checkable finding rather than a general claim about a gap:
+the official SDK's challenge reader rejects spec-compliant `client_domain` challenges, at
+`txnbuild/transaction.go:1265`, so this server implements its own reader. A reader can verify
+that in the SDK source in under a minute.
+
+It then states the scope boundary in the first paragraph — SEP-10 authentication only, not an
+anchor, not KYC, not deposit or withdrawal — so nobody has to guess where this stops.
+
+The differential test of section 6.4 is named in the README too. It is the answer to the
+obvious reviewer question, "why did you duplicate SDK validation logic?": the duplication is
+pinned to upstream by a test, so divergence is a build failure rather than a slow drift.
+
 ## 2. Findings that changed the brief
 
 Four things were verified against the published modules and the SDK source before any code was
@@ -111,6 +125,13 @@ original brief's list, for the reason given in section 7.
 driver pulls in `lib/pq`; the pgx driver pulls nothing extra.
 
 Logging is `log/slog` with the JSON handler. Configuration is environment variables only.
+
+CI runs `go build ./...`, `go vet ./...`, a `gofmt -l .` check that fails on any output, and
+`go test ./...`. It pins `go-version: 1.25.12` — the identical version named in the `toolchain`
+directive, not a floating `1.25.x`, because the whole point of the pin is that the build does
+not depend on what a particular machine happens to have resolved. The differential test of
+section 6.4 runs as part of the ordinary test job; it needs no network and no database, so it
+gates every commit like any other test.
 
 ## 4. Repository layout
 
@@ -266,6 +287,20 @@ Two rules govern the client domain key, and reversing either is a security failu
   matched signers with the client domain key removed. Counting it would let any client domain
   satisfy any account's threshold.
 
+This is the most dangerous arithmetic in the project, so it does not live inline. It is a named
+function whose doc comment states the invariant in one sentence:
+
+```go
+// accountSignerWeight sums the weights of matched signers that belong to the account.
+// The client domain key is excluded: it proves the wallet took part, never that the
+// account authorised anything, and counting it would let any client domain meet any
+// account's threshold.
+func accountSignerWeight(found []string, summary txnbuild.SignerSummary,
+    clientDomainKey string) int32
+```
+
+Deleting the exclusion must break a test, not merely fail to be caught by one. See section 11.
+
 When the challenge carried a `client_domain` operation, the client domain key must appear among
 the matched signers, else `ErrClientDomainUnverified`.
 
@@ -404,8 +439,14 @@ a clock seam it does not otherwise need. Table-driven throughout.
 
 - **auth** — challenge issued for an existing account and for a non-existent account; missing
   signature rejected; threshold not met rejected; memo with muxed account rejected; client
-  domain signature required and verified; client domain weight excluded from the threshold sum;
-  the differential test of section 6.4.
+  domain signature required and verified; the differential test of section 6.4.
+- **threshold exclusion**, its own test, written to fail loudly if the exclusion in
+  `accountSignerWeight` is removed. An account has medium threshold 2 and one signer of weight
+  1. The challenge is signed by that signer and by a client domain key carrying weight 2 in the
+  summary. Verification **must** fail with `ErrThresholdNotMet`: the account contributed 1
+  against a threshold of 2, and the client domain's 2 is not the account's to spend. Deleting
+  the exclusion makes the sum 3, the call succeeds, and this test goes red. A passing-case test
+  alone would not catch it, which is why this case is specified separately.
 - **replay** — a consumed nonce is rejected on second use; an expired nonce is rejected.
 - **clientdomain** — `SIGNING_KEY` extracted; missing key rejected; oversized body rejected;
   non-HTTPS rejected; redirect limit enforced; cache hit avoids a second fetch. Driven by
