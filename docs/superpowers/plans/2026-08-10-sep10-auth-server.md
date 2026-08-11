@@ -77,6 +77,15 @@ Every task's requirements implicitly include this section.
   behind a build tag.
 - **Before every commit touching logic:** `go build ./...`, `go vet ./...`, `gofmt -l .` empty,
   `go test ./...` green.
+- **Module graph:** Task 1 resolved the dependency set on a module with zero packages, so every
+  requirement landed in `go.mod` marked `// indirect` and `go.sum` carries only what resolution
+  itself needed — not the transitive closure a real import pulls in. The first task that imports
+  a dependency for real therefore hits a missing `go.sum` entry. That is expected, not a broken
+  lockfile: run `go mod tidy` and stage `go.mod` and `go.sum` alongside that task's own files.
+  `tidy` also drops requirements nothing imports yet, so `go.mod` shrinks before it grows; each
+  later task re-adds what it imports. Never hand-edit `go.sum`. After `tidy`, confirm the two
+  standing bans still hold: `grep -c "lib/pq" go.sum` and `grep -c "github.com/stellar/go " go.mod`
+  must both print `0`.
 - **Git:** stage by path, never `git add .` after Task 1. Conventional commits. Push immediately
   after every commit. No attribution trailers, no "generated with" footers.
 - **Plain language** in comments and docs. Not "seamlessly", "robust", "powerful", "leverage".
@@ -523,7 +532,18 @@ func TestLoadNeverEchoesSecrets(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [ ] **Step 2: Settle the module graph, then run the test to verify it fails**
+
+This is the first package to import the SDK for real, so `go.sum` is missing the transitive
+entries the import pulls in. Settle it first, or the compile error you get is about `go.sum`
+rather than about `Load`:
+
+Run: `go mod tidy`
+Expected: some downloading, exit 0. `go.mod` shrinks — `tidy` drops the requirements nothing
+imports yet, leaving `go-stellar-sdk` and `testify` as direct.
+
+Run: `grep -c "lib/pq" go.sum; grep -c "github.com/stellar/go " go.mod`
+Expected: `0` twice.
 
 Run: `go test ./internal/config/ -v`
 Expected: FAIL — `undefined: Load`
@@ -729,7 +749,7 @@ Expected: PASS — all four tests, including every subtest of `TestLoadMissingRe
 
 ```bash
 make check
-git add internal/config/config.go internal/config/config_test.go
+git add go.mod go.sum internal/config/config.go internal/config/config_test.go
 git commit -m "feat(config): add environment config loading and validation"
 git push
 ```
