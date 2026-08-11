@@ -202,8 +202,21 @@ mean the same thing.
 
 - [ ] **Step 7: Verify the module builds**
 
-Run: `make check`
-Expected: passes. No packages exist yet, so `go build ./...` and `go test ./...` are no-ops.
+The module has no Go packages yet — the first one arrives in Task 4 — so run the two targets
+that are meaningful on an empty module:
+
+Run: `go build ./... && test -z "$(gofmt -l .)" && echo ok`
+Expected: `ok`, after a `matched no packages` warning from the build.
+
+Do **not** run `make check` yet, and do not change the Makefile to make it pass. On a module
+with zero packages, `go vet ./...` and `go test ./...` both exit 1 with "no packages to
+vet/test" — verified on go1.25.12. That is correct behaviour, not a fault in the Makefile.
+Relaxing those targets to tolerate an empty match would keep tolerating it forever, and would
+later hide a genuine failure that looks identical: a build tag or `//go:build` line that
+accidentally excludes every file in a package.
+
+`make check` becomes the gate from Task 4 onward, once there is a package to check. Tasks 2 and
+3 add no Go code and do not run it.
 
 - [ ] **Step 8: Commit**
 
