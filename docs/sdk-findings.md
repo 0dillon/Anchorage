@@ -45,3 +45,16 @@ transaction, and no lower-level entry point is exported — `verifyTxSignatures`
 
 Anchorage therefore implements its own reader in `internal/auth/read.go`, pinned to upstream
 behaviour by the differential test in `internal/auth/differential_test.go`.
+
+## Anchorage rejects duplicate operations that ReadChallengeTx accepts
+
+`ReadChallengeTx` has no duplicate tracking. It validates each operation independently, so a
+challenge with two `web_auth_domain` operations, or two `client_domain` operations, passes as
+long as each one individually looks valid. The second occurrence just overwrites or re-confirms
+whatever the first one set.
+
+`internal/auth/read.go` rejects both shapes with `ErrChallengeMalformed`. A manage_data
+operation naming `web_auth_domain` or `client_domain` a second time is ambiguous: which one is
+authoritative? Last-wins is not a defensible answer to that question in a parser whose output
+selects the account being authenticated and the domain that's granted a token. So Anchorage
+treats a duplicate as malformed rather than silently picking one.

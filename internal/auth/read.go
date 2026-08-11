@@ -138,6 +138,8 @@ func ReadChallenge(challengeXDR, serverAccountID, networkPassphrase, webAuthDoma
 		return nil, fmt.Errorf("%w: nonce must decode to %d bytes", ErrChallengeMalformed, nonceRawLen)
 	}
 
+	var sawWebAuthDomain, sawClientDomain bool
+
 	for _, op := range ops[1:] {
 		data, isManageData := op.(*txnbuild.ManageData)
 		if !isManageData {
@@ -149,6 +151,10 @@ func ReadChallenge(challengeXDR, serverAccountID, networkPassphrase, webAuthDoma
 
 		switch data.Name {
 		case opWebAuthDomain:
+			if sawWebAuthDomain {
+				return nil, fmt.Errorf("%w: challenge carries more than one web_auth_domain operation", ErrChallengeMalformed)
+			}
+			sawWebAuthDomain = true
 			if data.SourceAccount != serverAccountID {
 				return nil, fmt.Errorf("%w: web_auth_domain operation must be sourced at the server", ErrChallengeMalformed)
 			}
@@ -157,11 +163,18 @@ func ReadChallenge(challengeXDR, serverAccountID, networkPassphrase, webAuthDoma
 			}
 
 		case opClientDomain:
+			if sawClientDomain {
+				return nil, fmt.Errorf("%w: challenge carries more than one client_domain operation", ErrChallengeMalformed)
+			}
+			sawClientDomain = true
 			// The rule the SDK lacks. SEP-10 requires this operation to be
 			// sourced at the client domain's SIGNING_KEY, not at the server,
 			// because the client domain is what signs it.
 			if !strkey.IsValidEd25519PublicKey(data.SourceAccount) {
 				return nil, fmt.Errorf("%w: client_domain operation must be sourced at a G... signing key", ErrChallengeMalformed)
+			}
+			if data.SourceAccount == serverAccountID {
+				return nil, fmt.Errorf("%w: client_domain operation must not be sourced at the server", ErrChallengeMalformed)
 			}
 			if len(data.Value) == 0 {
 				return nil, fmt.Errorf("%w: client_domain operation must name a domain", ErrChallengeMalformed)

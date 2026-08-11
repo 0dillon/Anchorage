@@ -174,6 +174,36 @@ func TestReadChallengeRejections(t *testing.T) {
 			signers: []*keypair.Full{serverKP},
 			wantErr: ErrChallengeMalformed,
 		},
+		{
+			name: "two client_domain operations",
+			mutate: func(p *txnbuild.TransactionParams) {
+				p.Operations = append(p.Operations, clientDomainOp(), clientDomainOp())
+			},
+			signers: []*keypair.Full{serverKP},
+			wantErr: ErrChallengeMalformed,
+		},
+		{
+			name: "two web_auth_domain operations",
+			mutate: func(p *txnbuild.TransactionParams) {
+				p.Operations = append(p.Operations, &txnbuild.ManageData{
+					SourceAccount: serverKP.Address(),
+					Name:          "web_auth_domain",
+					Value:         []byte(testWebAuthDomain),
+				})
+			},
+			signers: []*keypair.Full{serverKP},
+			wantErr: ErrChallengeMalformed,
+		},
+		{
+			name: "client_domain sourced at the server",
+			mutate: func(p *txnbuild.TransactionParams) {
+				op := clientDomainOp()
+				op.SourceAccount = serverKP.Address()
+				p.Operations = append(p.Operations, op)
+			},
+			signers: []*keypair.Full{serverKP},
+			wantErr: ErrChallengeMalformed,
+		},
 	}
 
 	for _, tt := range tests {
