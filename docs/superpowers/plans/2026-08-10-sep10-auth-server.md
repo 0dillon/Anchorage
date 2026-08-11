@@ -6369,9 +6369,17 @@ func postAuthHandler(d Deps) http.HandlerFunc {
 			return
 		}
 
-		// The nonce is spent before the signatures are checked. A challenge
-		// answered once is answered; verifying first would let a caller retry
-		// the same live challenge as often as they liked.
+		// The nonce is spent BEFORE the signatures are checked. This ordering
+		// is deliberate; do not reverse it.
+		//
+		// Verifying first would leave the challenge live through a failed
+		// attempt, turning it into an unlimited retry oracle against a single
+		// nonce — exactly the property replay protection exists to remove.
+		// Spending first means one challenge buys one attempt.
+		//
+		// The cost is that a malformed or mis-signed submission burns the
+		// challenge and the client must request another. That is one call, and
+		// it is the cheaper side of the trade.
 		now := time.Now().UTC()
 		consumed, err := d.Challenges.ConsumeChallenge(r.Context(), challenge.Nonce, now)
 		if err != nil {
@@ -7266,7 +7274,12 @@ and `TestClientDomainWeightDoesNotSatisfyThreshold` fails if the exclusion is re
 
 **A challenge is single-use.** Consumption is one atomic `UPDATE ... WHERE consumed_at IS NULL`,
 never a read followed by a write, so two concurrent posts of the same challenge cannot both
-succeed. The nonce is spent before signatures are checked: one challenge, one attempt.
+succeed.
+
+**The nonce is spent before signatures are checked.** Verifying first would leave the challenge
+live through a failed attempt, turning one nonce into an unlimited retry oracle — the property
+replay protection exists to remove. One challenge buys one attempt. A mis-signed submission
+burns it and the client requests another, which is one call.
 
 **Client domain responses are hostile input.** HTTPS only, including after redirects, at most
 three redirects, a five-second timeout on the whole request, and a 100 KB body cap that rejects
