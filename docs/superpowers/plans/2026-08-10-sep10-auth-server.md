@@ -787,22 +787,13 @@ func New(w io.Writer, level slog.Level) *slog.Logger {
 		Level: level,
 	}))
 }
-
-// ParseLevel maps a level name to a slog.Level, defaulting to info for an
-// unrecognised name so a typo degrades to normal logging rather than silence.
-func ParseLevel(name string) slog.Level {
-	switch name {
-	case "debug", "DEBUG":
-		return slog.LevelDebug
-	case "warn", "WARN":
-		return slog.LevelWarn
-	case "error", "ERROR":
-		return slog.LevelError
-	default:
-		return slog.LevelInfo
-	}
-}
 ```
+
+The package exports `New` and nothing else. An earlier draft also exported a `ParseLevel` name
+mapper, but nothing calls it: `main` passes `slog.LevelInfo` directly and there is no
+`SEP10_LOG_LEVEL` variable to feed it. An exported function with no caller is the speculative
+code the Global Constraints forbid, so it is gone. The level is a compile-time choice until
+something needs it not to be.
 
 - [ ] **Step 2: Verify it builds**
 
