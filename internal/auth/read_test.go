@@ -177,7 +177,14 @@ func TestReadChallengeRejections(t *testing.T) {
 		{
 			name: "two client_domain operations",
 			mutate: func(p *txnbuild.TransactionParams) {
-				p.Operations = append(p.Operations, clientDomainOp(), clientDomainOp())
+				// The second names a different domain and a different key.
+				// Without the duplicate check it silently wins, and the
+				// challenge reports a domain the first never mentioned.
+				p.Operations = append(p.Operations, clientDomainOp())
+				second := clientDomainOp()
+				second.SourceAccount = otherKP.Address()
+				second.Value = []byte("evil.example.net")
+				p.Operations = append(p.Operations, second)
 			},
 			signers: []*keypair.Full{serverKP},
 			wantErr: ErrChallengeMalformed,

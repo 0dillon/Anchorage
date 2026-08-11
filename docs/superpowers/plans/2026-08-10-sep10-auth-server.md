@@ -1311,6 +1311,43 @@ func TestReadChallengeRejections(t *testing.T) {
 			signers: []*keypair.Full{serverKP},
 			wantErr: ErrChallengeMalformed,
 		},
+		{
+			name: "two client_domain operations",
+			mutate: func(p *txnbuild.TransactionParams) {
+				// The second names a different domain and a different key.
+				// Without the duplicate check it silently wins, and the
+				// challenge reports a domain the first never mentioned.
+				p.Operations = append(p.Operations, clientDomainOp())
+				second := clientDomainOp()
+				second.SourceAccount = otherKP.Address()
+				second.Value = []byte("evil.example.net")
+				p.Operations = append(p.Operations, second)
+			},
+			signers: []*keypair.Full{serverKP},
+			wantErr: ErrChallengeMalformed,
+		},
+		{
+			name: "two web_auth_domain operations",
+			mutate: func(p *txnbuild.TransactionParams) {
+				p.Operations = append(p.Operations, &txnbuild.ManageData{
+					SourceAccount: serverKP.Address(),
+					Name:          "web_auth_domain",
+					Value:         []byte(testWebAuthDomain),
+				})
+			},
+			signers: []*keypair.Full{serverKP},
+			wantErr: ErrChallengeMalformed,
+		},
+		{
+			name: "client_domain sourced at the server",
+			mutate: func(p *txnbuild.TransactionParams) {
+				op := clientDomainOp()
+				op.SourceAccount = serverKP.Address()
+				p.Operations = append(p.Operations, op)
+			},
+			signers: []*keypair.Full{serverKP},
+			wantErr: ErrChallengeMalformed,
+		},
 	}
 
 	for _, tt := range tests {
@@ -1543,6 +1580,7 @@ func ReadChallenge(challengeXDR, serverAccountID, networkPassphrase, webAuthDoma
 		return nil, fmt.Errorf("%w: nonce must decode to %d bytes", ErrChallengeMalformed, nonceRawLen)
 	}
 
+	var sawWebAuthDomain, sawClientDomain bool
 	for _, op := range ops[1:] {
 		data, isManageData := op.(*txnbuild.ManageData)
 		if !isManageData {
@@ -1554,6 +1592,10 @@ func ReadChallenge(challengeXDR, serverAccountID, networkPassphrase, webAuthDoma
 
 		switch data.Name {
 		case opWebAuthDomain:
+			if sawWebAuthDomain {
+				return nil, fmt.Errorf("%w: challenge carries more than one web_auth_domain operation", ErrChallengeMalformed)
+			}
+			sawWebAuthDomain = true
 			if data.SourceAccount != serverAccountID {
 				return nil, fmt.Errorf("%w: web_auth_domain operation must be sourced at the server", ErrChallengeMalformed)
 			}
@@ -1562,11 +1604,18 @@ func ReadChallenge(challengeXDR, serverAccountID, networkPassphrase, webAuthDoma
 			}
 
 		case opClientDomain:
+			if sawClientDomain {
+				return nil, fmt.Errorf("%w: challenge carries more than one client_domain operation", ErrChallengeMalformed)
+			}
+			sawClientDomain = true
 			// The rule the SDK lacks. SEP-10 requires this operation to be
 			// sourced at the client domain's SIGNING_KEY, not at the server,
 			// because the client domain is what signs it.
 			if !strkey.IsValidEd25519PublicKey(data.SourceAccount) {
 				return nil, fmt.Errorf("%w: client_domain operation must be sourced at a G... signing key", ErrChallengeMalformed)
+			}
+			if data.SourceAccount == serverAccountID {
+				return nil, fmt.Errorf("%w: client_domain operation must not be sourced at the server", ErrChallengeMalformed)
 			}
 			if len(data.Value) == 0 {
 				return nil, fmt.Errorf("%w: client_domain operation must name a domain", ErrChallengeMalformed)
@@ -1842,8 +1891,15 @@ Run: `go test ./internal/auth/ -run TestReader -v`
 Expected: PASS.
 
 A failure here means our reader and the SDK's disagree on a shape they should both handle. Fix
-our reader to match the SDK unless the disagreement is the client_domain rule — that one is
-deliberate. Do not weaken the test to make it pass.
+our reader to match the SDK unless the disagreement is deliberate. Do not weaken the test to
+make it pass.
+
+Two divergences are deliberate, and the corpus above avoids both on purpose. The first is
+`client_domain`, which the SDK cannot read at all. The second is duplicate operations: a
+challenge carrying two `client_domain` or two `web_auth_domain` operations is rejected here and
+accepted by the SDK, which has no duplicate tracking and validates each occurrence
+independently. Do not add a duplicate-operation case to this table — it will fail, and the
+failure means nothing. Both divergences are recorded in `docs/sdk-findings.md`.
 
 - [ ] **Step 3: Commit**
 
