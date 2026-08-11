@@ -348,7 +348,7 @@ A SEP-10 Stellar Web Authentication server.
 
 The official Go SDK's challenge reader rejects spec-compliant `client_domain` challenges.
 `ReadChallengeTx` requires every operation after the first to be sourced at the server account
-(`txnbuild/transaction.go:1265`), but SEP-10 requires the `client_domain` operation to be
+(`txnbuild/transaction.go:1270`), but SEP-10 requires the `client_domain` operation to be
 sourced at the client domain's `SIGNING_KEY`. A server built on the SDK alone would reject its
 own challenges. Anchorage therefore implements its own challenge reader.
 
@@ -831,7 +831,7 @@ pinned version behaves differently from the one that was probed.
 SDK=$(go env GOMODCACHE)/github.com/stellar/go-stellar-sdk@v0.7.1
 go doc github.com/stellar/go-stellar-sdk/txnbuild.BuildChallengeTx
 grep -rn "client_domain" "$SDK" --include=*.go | wc -l
-sed -n '1265,1275p' "$SDK/txnbuild/transaction.go"
+sed -n '1266,1276p' "$SDK/txnbuild/transaction.go"
 ```
 
 Expected: the `BuildChallengeTx` signature ends `timebound time.Duration, memo *MemoID`; the
@@ -871,7 +871,7 @@ func BuildChallengeTx(serverSignerSecret, clientAccountID, webAuthDomain, homeDo
 
 `grep -rn client_domain` across the SDK returns nothing. `ReadChallengeTx` requires every
 operation after the first to be sourced at the server account
-(`txnbuild/transaction.go:1265`):
+(`txnbuild/transaction.go:1270`):
 
 ```go
 default:
@@ -7359,12 +7359,12 @@ This is not a formatting pass. For each item, open the file and confirm:
 - Every variable in the configuration table exists in `internal/config/config.go`, with the
   default shown.
 - The status table matches `sentinelStatus` in `internal/httpapi/auth_handler.go`.
-- The `txnbuild/transaction.go:1265` reference in the opening section still points at the
+- The `txnbuild/transaction.go:1270` reference in the opening section still points at the
   `default` branch that rejects `client_domain`:
 
 ```bash
 go doc github.com/stellar/go-stellar-sdk/txnbuild.ReadChallengeTx
-sed -n '1260,1270p' "$(go env GOMODCACHE)/github.com/stellar/go-stellar-sdk@v0.7.1/txnbuild/transaction.go"
+sed -n '1266,1276p' "$(go env GOMODCACHE)/github.com/stellar/go-stellar-sdk@v0.7.1/txnbuild/transaction.go"
 ```
 
 If any claim is wrong, fix the README, not the check.

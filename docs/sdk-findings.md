@@ -25,7 +25,7 @@ func BuildChallengeTx(serverSignerSecret, clientAccountID, webAuthDomain, homeDo
 
 `grep -rn client_domain` across the SDK returns nothing. `ReadChallengeTx` requires every
 operation after the first to be sourced at the server account
-(`txnbuild/transaction.go:1265`):
+(`txnbuild/transaction.go:1270`):
 
 ```go
 default:

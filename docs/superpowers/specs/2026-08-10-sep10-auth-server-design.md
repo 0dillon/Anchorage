@@ -19,7 +19,7 @@ and a gap. This fills the gap.
 
 The README leads with the concrete, checkable finding rather than a general claim about a gap:
 the official SDK's challenge reader rejects spec-compliant `client_domain` challenges, at
-`txnbuild/transaction.go:1265`, so this server implements its own reader. A reader can verify
+`txnbuild/transaction.go:1270`, so this server implements its own reader. A reader can verify
 that in the SDK source in under a minute.
 
 It then states the scope boundary in the first paragraph — SEP-10 authentication only, not an
@@ -78,7 +78,7 @@ two operations and signs, with no hook for a third — anticipated, and solvable
 operation and re-signing.
 
 The read side is not solvable that way. `ReadChallengeTx` validates every operation after the
-first (`txnbuild/transaction.go:1265`):
+first (`txnbuild/transaction.go:1270`):
 
 ```go
 default:

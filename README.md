@@ -6,7 +6,7 @@ A SEP-10 Stellar Web Authentication server.
 
 The official Go SDK's challenge reader rejects spec-compliant `client_domain` challenges.
 `ReadChallengeTx` requires every operation after the first to be sourced at the server account
-(`txnbuild/transaction.go:1265`), but SEP-10 requires the `client_domain` operation to be
+(`txnbuild/transaction.go:1270`), but SEP-10 requires the `client_domain` operation to be
 sourced at the client domain's `SIGNING_KEY`. A server built on the SDK alone would reject its
 own challenges. Anchorage therefore implements its own challenge reader.
 
