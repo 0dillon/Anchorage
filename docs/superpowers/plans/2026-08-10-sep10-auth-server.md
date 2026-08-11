@@ -1141,6 +1141,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stellar/go-stellar-sdk/keypair"
 	"github.com/stellar/go-stellar-sdk/txnbuild"
 	"github.com/stretchr/testify/require"
 )
@@ -1597,14 +1598,10 @@ func ReadChallenge(challengeXDR, serverAccountID, networkPassphrase, webAuthDoma
 Run: `go test ./internal/auth/ -v`
 Expected: PASS, every subtest.
 
-If `client_domain sourced at a muxed account` fails because the hard-coded M-address is
-malformed, replace it with one built from the SDK rather than typed by hand:
-
-```go
-muxed, err := xdr.MuxedAccountFromAccountId(otherKP.Address(), 1)
-require.NoError(t, err)
-op.SourceAccount = muxed.Address()
-```
+The M-address in `client_domain sourced at a muxed account` is a real one, not a typed-out
+guess: `strkey.IsValidMuxedAccountEd25519PublicKey` returns true for it against v0.7.1. Use it
+as written. If it ever stops validating, derive one instead of editing characters —
+`xdr.MuxedAccountFromAccountId(otherKP.Address(), 1)` then `muxed.Address()`.
 
 - [ ] **Step 7: Commit**
 
