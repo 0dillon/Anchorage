@@ -96,9 +96,12 @@ func (p *Postgres) RecordChallenge(ctx context.Context, rec ChallengeRecord) err
 // consumed_at already set and matches nothing. Reading the row first and
 // writing it after would let both through.
 func (p *Postgres) ConsumeChallenge(ctx context.Context, nonce string, now time.Time) (*ConsumedChallenge, error) {
+	// expires_at is the signed transaction's own MaxTime, and a challenge is
+	// consumable up to and including that instant, matching internal/auth/read.go
+	// and the SDK. Hence expires_at >= $2, not >.
 	const consume = `
 		UPDATE challenges SET consumed_at = $2
-		WHERE nonce = $1 AND consumed_at IS NULL AND expires_at > $2
+		WHERE nonce = $1 AND consumed_at IS NULL AND expires_at >= $2
 		RETURNING account, home_domain, client_domain`
 
 	var (
@@ -140,7 +143,7 @@ func (p *Postgres) classifyFailure(ctx context.Context, nonce string, now time.T
 		return fmt.Errorf("inspecting challenge: %w", err)
 	case consumedAt != nil:
 		return fmt.Errorf("%w", auth.ErrChallengeConsumed)
-	case !expiresAt.After(now):
+	case expiresAt.Before(now):
 		return fmt.Errorf("%w", auth.ErrChallengeExpired)
 	default:
 		// The row is live and unconsumed, so the update should have matched.

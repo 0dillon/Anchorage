@@ -4608,8 +4608,45 @@ func TestConsumeChallengeRejectsExpired(t *testing.T) {
 	require.ErrorIs(t, err, auth.ErrChallengeExpired)
 }
 
+// A challenge is consumable at the exact instant it expires. Its expires_at is
+// the signed transaction's own MaxTime, and both internal/auth/read.go and the
+// SDK treat that instant as still valid, so the store must not refuse it one
+// tick early.
+func TestConsumeChallengeAtExactExpiry(t *testing.T) {
+	p := openTestStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	rec := testChallenge("nonce-expiry-boundary", now)
+	rec.ExpiresAt = now
+	require.NoError(t, p.RecordChallenge(ctx, rec))
+
+	got, err := p.ConsumeChallenge(ctx, "nonce-expiry-boundary", now)
+	require.NoError(t, err)
+	require.Equal(t, rec.Account, got.Account)
+}
+
+// One tick past expiry is refused, so the boundary above is inclusive rather
+// than simply unchecked.
+func TestConsumeChallengeJustPastExpiry(t *testing.T) {
+	p := openTestStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	rec := testChallenge("nonce-expiry-past", now)
+	rec.ExpiresAt = now.Add(-time.Second)
+	require.NoError(t, p.RecordChallenge(ctx, rec))
+
+	_, err := p.ConsumeChallenge(ctx, "nonce-expiry-past", now)
+	require.ErrorIs(t, err, auth.ErrChallengeExpired)
+}
+
 // Only one of many concurrent consumers can win. This is the property the
 // single-statement update exists for.
+//
+// This only proves serialization by the database's lock if the pool actually
+// allows concurrent connections. A test DSN with pool_max_conns=1 would still
+// pass here, but by serializing through the pool instead.
 func TestConsumeChallengeIsAtomic(t *testing.T) {
 	p := openTestStore(t)
 	ctx := context.Background()
@@ -4795,9 +4832,12 @@ func (p *Postgres) RecordChallenge(ctx context.Context, rec ChallengeRecord) err
 // consumed_at already set and matches nothing. Reading the row first and
 // writing it after would let both through.
 func (p *Postgres) ConsumeChallenge(ctx context.Context, nonce string, now time.Time) (*ConsumedChallenge, error) {
+	// expires_at is the signed transaction's own MaxTime, and a challenge is
+	// consumable up to and including that instant, matching internal/auth/read.go
+	// and the SDK. Hence expires_at >= $2, not >.
 	const consume = `
 		UPDATE challenges SET consumed_at = $2
-		WHERE nonce = $1 AND consumed_at IS NULL AND expires_at > $2
+		WHERE nonce = $1 AND consumed_at IS NULL AND expires_at >= $2
 		RETURNING account, home_domain, client_domain`
 
 	var (
@@ -4839,7 +4879,7 @@ func (p *Postgres) classifyFailure(ctx context.Context, nonce string, now time.T
 		return fmt.Errorf("inspecting challenge: %w", err)
 	case consumedAt != nil:
 		return fmt.Errorf("%w", auth.ErrChallengeConsumed)
-	case !expiresAt.After(now):
+	case expiresAt.Before(now):
 		return fmt.Errorf("%w", auth.ErrChallengeExpired)
 	default:
 		// The row is live and unconsumed, so the update should have matched.
