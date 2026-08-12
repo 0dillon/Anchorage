@@ -3092,6 +3092,20 @@ func TestAccountHonoursContextCancellation(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 }
 
+// A 200 whose body is valid JSON but not an account decodes without error into
+// an account with no signers and a zero threshold. That must be a lookup
+// failure, not a usable account, and never a missing account.
+func TestAccountRejectsResponseWithNoSigners(t *testing.T) {
+	f, _ := newTestFetcher(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	})
+
+	_, err := f.Account(context.Background(), accountID)
+	require.ErrorIs(t, err, auth.ErrAccountLookupFailed)
+	require.NotErrorIs(t, err, auth.ErrAccountNotFound)
+}
+
 func TestNewFetcherRejectsBadURL(t *testing.T) {
 	_, err := NewFetcher("", http.DefaultClient)
 	require.Error(t, err)
@@ -3213,8 +3227,13 @@ func (f *Fetcher) Account(ctx context.Context, accountID string) (*auth.Account,
 		return nil, fmt.Errorf("%w: decoding body: %w", auth.ErrAccountLookupFailed, err)
 	}
 
+	signers := decoded.SignerSummary()
+	if len(signers) == 0 {
+		return nil, fmt.Errorf("%w: horizon returned an account with no signers", auth.ErrAccountLookupFailed)
+	}
+
 	return &auth.Account{
-		Signers:      decoded.SignerSummary(),
+		Signers:      signers,
 		MedThreshold: int32(decoded.Thresholds.MedThreshold),
 	}, nil
 }
