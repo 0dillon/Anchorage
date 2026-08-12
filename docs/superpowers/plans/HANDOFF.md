@@ -103,8 +103,10 @@ restore it.
   Without it the toolchain fails to resolve.
 - A task that adds a first-time import needs `go mod tidy`, and `go.mod`/`go.sum` are then
   staged with that task's commit. This is expected, not a workaround.
-- The plan is the source of truth and has been corrected five times when it was wrong. Fix the
-  plan, not the Makefile or the CI workflow, and never relax a check to make a build pass.
+- The plan is the source of truth and has been corrected many times when it was wrong, in both
+  directions: prose that misdescribed its own code, and code blocks that had drifted from what
+  shipped. Fix the plan, not the Makefile or the CI workflow, and never relax a check to make a
+  build pass. When a fix changes shipped behaviour, sync the plan's code block in the same commit.
 
 ## Deferred until after submission
 
