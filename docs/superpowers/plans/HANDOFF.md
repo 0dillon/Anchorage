@@ -1,6 +1,6 @@
 # Anchorage — handoff
 
-State as of commit `34361b7`, branch `main`, pushed. Working tree clean, `make check` green.
+State as of commit `08cfb04`, branch `main`, pushed. Working tree clean, `make check` green.
 
 Plan: `docs/superpowers/plans/2026-08-10-sep10-auth-server.md` (23 tasks).
 Execution ledger with full per-task detail: `.superpowers/sdd/progress.md` (git-ignored).
@@ -26,7 +26,7 @@ Tasks 1-16. Each passed a spec-compliance and a code-quality verdict.
 | 13 | `internal/clientdomain` resolver | `3c743a4` |
 | 14 | `internal/token` JWT | `b824ce2`, `073383c` |
 | 15 | Store records and migrations | `2204d5c`, `3cf779d` |
-| 16 | Postgres store and cleanup loop | `34361b7` |
+| 16 | Postgres store and cleanup loop | `34361b7`, `08cfb04` |
 
 ## Next
 
@@ -34,7 +34,7 @@ Task 17, `internal/httpapi` — router, middleware, and the health endpoint.
 
 ## MUST DO BEFORE SUBMISSION: run the store integration tests
 
-**The replay-protection SQL has never been executed.** Task 16's seven build-tagged tests
+**The replay-protection SQL has never been executed.** Task 16's nine build-tagged tests
 compile and have never run: this environment has no Docker, no `psql`, no Postgres. Every
 statement in `internal/store/postgres.go` is unexercised, including the single atomic
 `UPDATE` that is the whole of the replay protection. Task 19 tests replay *behaviour*
