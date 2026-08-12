@@ -28,10 +28,10 @@ func TestHealthEndpoint(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			router, err := NewRouter(Deps{
-				Logger: discardLogger(),
-				Health: fakePinger{err: tt.pingErr},
-			})
+			deps, _ := newTestDeps(t)
+			deps.Health = fakePinger{err: tt.pingErr}
+
+			router, err := NewRouter(deps)
 			require.NoError(t, err)
 
 			rec := httptest.NewRecorder()
@@ -52,9 +52,23 @@ func TestHealthEndpoint(t *testing.T) {
 }
 
 func TestNewRouterRequiresDependencies(t *testing.T) {
-	_, err := NewRouter(Deps{Health: fakePinger{}})
-	require.Error(t, err)
+	tests := []struct {
+		name   string
+		mutate func(*Deps)
+	}{
+		{"no logger", func(d *Deps) { d.Logger = nil }},
+		{"no health pinger", func(d *Deps) { d.Health = nil }},
+		{"no issuer", func(d *Deps) { d.Issuer = nil }},
+		{"no challenge store", func(d *Deps) { d.Challenges = nil }},
+	}
 
-	_, err = NewRouter(Deps{Logger: discardLogger()})
-	require.Error(t, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			deps, _ := newTestDeps(t)
+			tt.mutate(&deps)
+
+			_, err := NewRouter(deps)
+			require.Error(t, err)
+		})
+	}
 }

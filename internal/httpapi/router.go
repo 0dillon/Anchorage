@@ -77,6 +77,12 @@ func NewRouter(d Deps) (http.Handler, error) {
 	if d.Health == nil {
 		return nil, fmt.Errorf("a health pinger is required")
 	}
+	if d.Issuer == nil {
+		return nil, fmt.Errorf("a challenge issuer is required")
+	}
+	if d.Challenges == nil {
+		return nil, fmt.Errorf("a challenge store is required")
+	}
 
 	limiter := newRateLimiter(requestsPerMinute)
 
@@ -98,6 +104,7 @@ func NewRouter(d Deps) (http.Handler, error) {
 	r.Use(limiter.middleware(d.Logger))
 
 	r.Get("/health", healthHandler(d.Health, d.Logger))
+	r.Get("/auth", getAuthHandler(d))
 
 	return r, nil
 }

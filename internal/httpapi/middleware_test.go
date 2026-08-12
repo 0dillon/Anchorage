@@ -154,10 +154,9 @@ func TestRateLimitMiddlewareReturns429(t *testing.T) {
 // rate-limit bucket. Every request here comes from one TCP peer, so the bucket
 // runs out however the header changes.
 func TestRateLimitIgnoresForgedForwardedHeaderByDefault(t *testing.T) {
-	router, err := NewRouter(Deps{
-		Logger: discardLogger(),
-		Health: fakePinger{},
-	})
+	deps, _ := newTestDeps(t)
+	deps.Health = fakePinger{}
+	router, err := NewRouter(deps)
 	require.NoError(t, err)
 
 	newReq := func(forwarded string) *http.Request {
@@ -184,11 +183,10 @@ func TestRateLimitIgnoresForgedForwardedHeaderByDefault(t *testing.T) {
 // bucket's worth of requests all succeed. Without this test the one above would
 // still pass if the gate ignored its setting and never mounted RealIP at all.
 func TestRateLimitHonoursForwardedHeaderWhenTrusted(t *testing.T) {
-	router, err := NewRouter(Deps{
-		Logger:            discardLogger(),
-		Health:            fakePinger{},
-		TrustProxyHeaders: true,
-	})
+	deps, _ := newTestDeps(t)
+	deps.Health = fakePinger{}
+	deps.TrustProxyHeaders = true
+	router, err := NewRouter(deps)
 	require.NoError(t, err)
 
 	for i := range requestsPerMinute + 5 {
