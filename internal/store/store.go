@@ -60,6 +60,10 @@ type SessionRecord struct {
 func migrationURL(databaseURL string) (string, error) {
 	parsed, err := url.Parse(databaseURL)
 	if err != nil {
+		// err is discarded on purpose, against the usual %w convention:
+		// url.Parse quotes the input it could not parse, so wrapping it here
+		// would put the connection string, and the password in it, into the
+		// error. Do not add %w back.
 		return "", fmt.Errorf("database url is not a valid URL")
 	}
 
