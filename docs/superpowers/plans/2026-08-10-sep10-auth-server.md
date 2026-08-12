@@ -350,6 +350,11 @@ SEP10_CLIENT_DOMAIN_CACHE_TTL=5m
 SEP10_DATABASE_URL=postgres://anchorage:anchorage@localhost:5432/anchorage?sslmode=disable
 SEP10_LISTEN_ADDR=:8080
 SEP10_TOML_PATH=./deploy/stellar.toml.example
+# Trust X-Forwarded-For and X-Real-IP to identify the client. Leave this false
+# unless Anchorage sits behind a proxy you control that OVERWRITES those headers.
+# A proxy that appends them, or no proxy at all, lets any caller forge the header
+# and defeat the per-IP rate limit.
+SEP10_TRUST_PROXY_HEADERS=false
 ```
 
 - [ ] **Step 2: Write the README skeleton**
@@ -474,6 +479,9 @@ func TestLoadDefaults(t *testing.T) {
 	require.Equal(t, ":8080", cfg.ListenAddr)
 	require.False(t, cfg.ClientDomainRequired)
 	require.Empty(t, cfg.ClientDomainAllowlist)
+	// Forwarded headers are caller-supplied, so the default must be not to
+	// believe them.
+	require.False(t, cfg.TrustProxyHeaders)
 
 	// The public key is derived at load so handlers never touch the secret.
 	require.Equal(t, testKP.Address(), cfg.SigningPublicKey)
@@ -521,6 +529,7 @@ func TestLoadMalformed(t *testing.T) {
 		{"jwt lifetime unparseable", "SEP10_JWT_LIFETIME", "forever"},
 		{"cache ttl negative", "SEP10_CLIENT_DOMAIN_CACHE_TTL", "-1m"},
 		{"client domain required not a bool", "SEP10_CLIENT_DOMAIN_REQUIRED", "yes please"},
+		{"trust proxy headers not a bool", "SEP10_TRUST_PROXY_HEADERS", "sometimes"},
 		{"home domains empty after trim", "SEP10_HOME_DOMAINS", " , "},
 	}
 
@@ -614,6 +623,12 @@ type Config struct {
 	DatabaseURL string
 	ListenAddr  string
 	TOMLPath    string
+
+	// TrustProxyHeaders says whether X-Forwarded-For and X-Real-IP may be
+	// believed when identifying a client. It defaults to false: those headers
+	// are caller-supplied, so trusting them without a proxy that overwrites
+	// them lets anyone forge an address and defeat the per-IP rate limit.
+	TrustProxyHeaders bool
 }
 
 // Load reads configuration through getenv and validates all of it. The error
@@ -703,6 +718,10 @@ func Load(getenv func(string) string) (*Config, error) {
 	}
 
 	if cfg.TOMLPath, err = required(getenv, "SEP10_TOML_PATH"); err != nil {
+		return nil, err
+	}
+
+	if cfg.TrustProxyHeaders, err = boolean(getenv, "SEP10_TRUST_PROXY_HEADERS", false); err != nil {
 		return nil, err
 	}
 
@@ -5037,6 +5056,7 @@ package httpapi
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -5181,6 +5201,58 @@ func TestRateLimitMiddlewareReturns429(t *testing.T) {
 	second := httptest.NewRecorder()
 	handler.ServeHTTP(second, newReq())
 	require.Equal(t, http.StatusTooManyRequests, second.Code)
+}
+
+// With TrustProxyHeaders false, a forged X-Forwarded-For must not buy a fresh
+// rate-limit bucket. Every request here comes from one TCP peer, so the bucket
+// runs out however the header changes.
+func TestRateLimitIgnoresForgedForwardedHeaderByDefault(t *testing.T) {
+	router, err := NewRouter(Deps{
+		Logger: discardLogger(),
+		Health: fakePinger{},
+	})
+	require.NoError(t, err)
+
+	newReq := func(forwarded string) *http.Request {
+		req := httptest.NewRequest(http.MethodGet, "/health", nil)
+		req.RemoteAddr = "1.2.3.4:5678"
+		req.Header.Set("X-Forwarded-For", forwarded)
+		return req
+	}
+
+	// Spend the whole bucket, presenting a different forged address each time.
+	for i := range requestsPerMinute {
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, newReq(fmt.Sprintf("10.0.0.%d", i%256)))
+		require.Equal(t, http.StatusOK, rec.Code, "request %d", i)
+	}
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, newReq("10.9.9.9"))
+	require.Equal(t, http.StatusTooManyRequests, rec.Code)
+}
+
+// The mirror image, and the control: with TrustProxyHeaders true, RealIP is
+// mounted and each forwarded address gets its own bucket, so more than a
+// bucket's worth of requests all succeed. Without this test the one above would
+// still pass if the gate ignored its setting and never mounted RealIP at all.
+func TestRateLimitHonoursForwardedHeaderWhenTrusted(t *testing.T) {
+	router, err := NewRouter(Deps{
+		Logger:            discardLogger(),
+		Health:            fakePinger{},
+		TrustProxyHeaders: true,
+	})
+	require.NoError(t, err)
+
+	for i := range requestsPerMinute + 5 {
+		req := httptest.NewRequest(http.MethodGet, "/health", nil)
+		req.RemoteAddr = "1.2.3.4:5678"
+		req.Header.Set("X-Forwarded-For", fmt.Sprintf("10.1.%d.%d", i/256, i%256))
+
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusOK, rec.Code, "request %d", i)
+	}
 }
 
 // Idle buckets are dropped, so a long-running server does not accumulate one
@@ -5612,6 +5684,12 @@ type Deps struct {
 	TOMLPath string
 	// SigningPublicKey is substituted into the SEP-1 file's SIGNING_KEY.
 	SigningPublicKey string
+	// TrustProxyHeaders mounts chi's RealIP middleware, so X-Forwarded-For and
+	// X-Real-IP decide which client the rate limit applies to. Leave it false
+	// unless a proxy under your control overwrites those headers: they are
+	// caller-supplied, and believing them otherwise makes the rate limit
+	// bypassable with one header.
+	TrustProxyHeaders bool
 }
 
 // NewRouter wires the routes. It returns an error rather than panicking so a
@@ -5628,7 +5706,16 @@ func NewRouter(d Deps) (http.Handler, error) {
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
+	// RealIP rewrites RemoteAddr from X-Forwarded-For and X-Real-IP, and it
+	// believes them unconditionally. Those headers come from the caller, so
+	// mounting it when nothing overwrites them upstream would let anyone send a
+	// fresh address per request and walk past the per-IP rate limit, as well as
+	// write whatever they liked into the logs. It is therefore mounted only when
+	// the operator states that a proxy they control is rewriting the headers.
+	// Without that, the rate limit keys on the real TCP peer.
+	if d.TrustProxyHeaders {
+		r.Use(middleware.RealIP)
+	}
 	r.Use(recoverPanic(d.Logger))
 	r.Use(requestLogger(d.Logger))
 	r.Use(limitBody)
@@ -7312,6 +7399,7 @@ func run() error {
 		HomeDomains:       cfg.HomeDomains,
 		TOMLPath:          cfg.TOMLPath,
 		SigningPublicKey:  cfg.SigningPublicKey,
+		TrustProxyHeaders: cfg.TrustProxyHeaders,
 	})
 	if err != nil {
 		return err
