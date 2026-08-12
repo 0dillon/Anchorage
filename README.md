@@ -129,9 +129,9 @@ Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for
 
 ## Maintainer
 
-| Name | Role | GitHub | Contact |
+| Name | Role | GitHub
 |---|---|---|---|
-| Dillon Ofili | Maintainer | [@0dillon](https://github.com/0dillon) | `<CONTACT>` |
+| Dillon Ofili | Maintainer | [@0dillon](https://github.com/0dillon) |
 
 ## Contributors
 
