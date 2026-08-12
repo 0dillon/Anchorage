@@ -149,8 +149,21 @@ func verifySigners(challenge *Challenge, networkPassphrase string, accountSigner
 	if !serverFound {
 		return nil, fmt.Errorf("%w: challenge is not signed by this server", ErrSignatureUnrecognized)
 	}
-	if len(found) == 0 {
-		return nil, fmt.Errorf("%w: challenge carries no recognised client signature", ErrSignatureUnrecognized)
+	// The client domain key does not count toward this guard. It proves the
+	// wallet took part, never that the account authorised anything, and it is
+	// only a candidate here so the "all signatures accounted for" check below
+	// does not reject the challenge outright. Without this exclusion, a
+	// challenge signed by only the server and the client domain would pass,
+	// even though no signer on the account ever signed it.
+	signerFound := false
+	for _, signer := range found {
+		if signer != challenge.ClientDomainKey {
+			signerFound = true
+			break
+		}
+	}
+	if !signerFound {
+		return nil, fmt.Errorf("%w: challenge carries no signature from a signer on the account", ErrSignatureUnrecognized)
 	}
 	if len(matched) != len(challenge.Tx.Signatures()) {
 		return nil, fmt.Errorf("%w: challenge carries unrecognised signatures", ErrSignatureUnrecognized)

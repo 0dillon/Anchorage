@@ -203,6 +203,52 @@ func TestAccountWeightAloneSatisfiesThreshold(t *testing.T) {
 	require.Contains(t, found, clientKP.Address())
 }
 
+// A challenge signed by the server and the client domain alone must not
+// authenticate the account. The client domain proves the wallet took part; it
+// never proves the account authorised anything. A Stellar account's thresholds
+// default to 0, so a zero medium threshold is the ordinary case, not an
+// exotic one, and a weight of 0 must not clear it.
+func TestVerifyClientDomainAloneDoesNotAuthenticate(t *testing.T) {
+	challenge := readSigned(t, clientDomainParams(), serverKP, clientDomainKP)
+
+	_, err := VerifyClient(context.Background(), challenge, testNetwork, fakeAccounts{
+		account: &Account{
+			Signers:      map[string]int32{clientKP.Address(): 1},
+			MedThreshold: 0,
+		},
+	})
+
+	require.ErrorIs(t, err, ErrSignatureUnrecognized)
+}
+
+// The same shape on the account-does-not-exist path, which returns without ever
+// reaching the threshold comparison.
+func TestVerifyClientDomainAloneDoesNotAuthenticateMissingAccount(t *testing.T) {
+	challenge := readSigned(t, clientDomainParams(), serverKP, clientDomainKP)
+
+	_, err := VerifyClient(context.Background(), challenge, testNetwork,
+		fakeAccounts{err: ErrAccountNotFound})
+
+	require.ErrorIs(t, err, ErrSignatureUnrecognized)
+}
+
+// The control: a zero medium threshold with a real signature from the account
+// still authenticates. Without this, the tests above could pass because client
+// domain challenges never verify at all.
+func TestVerifyClientZeroThresholdWithAccountSignature(t *testing.T) {
+	challenge := readSigned(t, clientDomainParams(), serverKP, clientKP, clientDomainKP)
+
+	found, err := VerifyClient(context.Background(), challenge, testNetwork, fakeAccounts{
+		account: &Account{
+			Signers:      map[string]int32{clientKP.Address(): 1},
+			MedThreshold: 0,
+		},
+	})
+
+	require.NoError(t, err)
+	require.Contains(t, found, clientKP.Address())
+}
+
 func TestAccountSignerWeightExcludesClientDomain(t *testing.T) {
 	summary := map[string]int32{
 		clientKP.Address():       1,
