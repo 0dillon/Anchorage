@@ -14,4 +14,3 @@
 
 **The service is unaudited.** Review it before running it in front of anything that matters.
 
-Responsible disclosure contact: `<CONTACT>`
