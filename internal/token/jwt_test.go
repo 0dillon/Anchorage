@@ -164,10 +164,32 @@ func TestParseRejectsTamperedToken(t *testing.T) {
 	}
 }
 
-// A token minted by a different issuer with a different secret is refused.
+// A token minted by a different issuer and signed with a different secret is
+// refused. This only shows that the signature check rejects the token; it
+// does not by itself show that the issuer is checked.
 func TestParseRejectsForeignIssuer(t *testing.T) {
 	other, err := NewIssuer(IssuerConfig{
 		Secret:   []byte("ffffffffffffffffffffffffffffffff"),
+		Issuer:   "https://evil.example.com",
+		Lifetime: time.Hour,
+	})
+	require.NoError(t, err)
+
+	raw, err := other.Issue(Request{Account: testAccount, JTI: "abc123", IssuedAt: testNow})
+	require.NoError(t, err)
+
+	_, err = newTestIssuer(t).Parse(raw, testNow)
+	require.ErrorIs(t, err, ErrTokenInvalid)
+}
+
+// The iss claim is checked on its own, not merely as a side effect of the
+// signature check. This token is signed with the SAME secret as the parsing
+// issuer, so the only thing wrong with it is the issuer, and it must still be
+// refused. Without this test, deleting the issuer check from Parse breaks
+// nothing.
+func TestParseRejectsForeignIssuerWithSameSecret(t *testing.T) {
+	other, err := NewIssuer(IssuerConfig{
+		Secret:   testSecret,
 		Issuer:   "https://evil.example.com",
 		Lifetime: time.Hour,
 	})
