@@ -84,8 +84,19 @@ Every task's requirements implicitly include this section.
   lockfile: run `go mod tidy` and stage `go.mod` and `go.sum` alongside that task's own files.
   `tidy` also drops requirements nothing imports yet, so `go.mod` shrinks before it grows; each
   later task re-adds what it imports. Never hand-edit `go.sum`. After `tidy`, confirm the two
-  standing bans still hold: `grep -c "lib/pq" go.sum` and `grep -c "github.com/stellar/go " go.mod`
-  must both print `0`.
+  standing bans still hold:
+  - `go list -deps ./... | grep lib/pq` must print nothing. **This is the `lib/pq` ban.** It lists
+    what the build actually links, which is what the ban is about: using the wrong migrate driver.
+  - `grep -c "github.com/stellar/go " go.mod` must print `0`.
+
+  `grep -c "lib/pq" go.sum` was the original form of the first check and it stopped being usable at
+  Task 16. It prints `2` there, including an `h1:` source hash, and no correct implementation can
+  make it print `0`: `go mod why -m github.com/lib/pq` traces the path through
+  `golang-migrate/v4/source/iofs.test`, because upstream's own external test for the `iofs` package
+  blank-imports `database/postgres`, and `go mod tidy` records the hashes needed to run `go test all`.
+  Anchorage imports only `database/pgx/v5`, nothing links `lib/pq`, and no `lib/pq` code is compiled
+  or shipped — `go.sum` merely records that the module exists in the graph. Do not chase this to `0`,
+  do not hand-edit `go.sum`, and do not drop `source/iofs` to satisfy a grep.
 - **Git:** stage by path, never `git add .` after Task 1. Conventional commits. Push immediately
   after every commit. No attribution trailers, no "generated with" footers.
 - **Plain language** in comments and docs. Not "seamlessly", "robust", "powerful", "leverage".
@@ -159,7 +170,13 @@ grep -c "lib/pq" go.sum || true
 grep -c "github.com/stellar/go " go.mod || true
 ```
 
-Expected: `0` for both. If `lib/pq` appears, the wrong migrate driver was imported.
+Expected: `0` for both, at this point in the build. If `lib/pq` appears now, the wrong migrate
+driver was imported.
+
+The `go.sum` half of this check only holds while no package imports a migrate source driver. From
+Task 16 onward it prints `2`, for a reason that is not a fault — see the Module graph clause in
+Global Constraints. `go list -deps ./... | grep lib/pq` is the check that keeps working, and it is
+the one the ban actually means.
 
 - [ ] **Step 4: Write `.gitignore`**
 
