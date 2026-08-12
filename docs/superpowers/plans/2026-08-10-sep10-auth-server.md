@@ -3055,7 +3055,9 @@ import (
 // so a real response is a few kilobytes; anything near this cap is not one.
 const maxAccountBytes = 256 * 1024
 
-// defaultTimeout bounds a lookup when the caller's context has no deadline.
+// defaultTimeout bounds a lookup when the caller supplies no HTTP client. A
+// caller that passes its own client owns that client's timeout, and the
+// request's context bounds it either way.
 const defaultTimeout = 10 * time.Second
 
 // Fetcher reads accounts from one Horizon instance.
