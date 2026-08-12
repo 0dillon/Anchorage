@@ -56,6 +56,7 @@ func TestLoadDefaults(t *testing.T) {
 	require.Equal(t, ":8080", cfg.ListenAddr)
 	require.False(t, cfg.ClientDomainRequired)
 	require.Empty(t, cfg.ClientDomainAllowlist)
+	require.False(t, cfg.TrustProxyHeaders)
 
 	// The public key is derived at load so handlers never touch the secret.
 	require.Equal(t, testKP.Address(), cfg.SigningPublicKey)
@@ -103,6 +104,7 @@ func TestLoadMalformed(t *testing.T) {
 		{"jwt lifetime unparseable", "SEP10_JWT_LIFETIME", "forever"},
 		{"cache ttl negative", "SEP10_CLIENT_DOMAIN_CACHE_TTL", "-1m"},
 		{"client domain required not a bool", "SEP10_CLIENT_DOMAIN_REQUIRED", "yes please"},
+		{"trust proxy headers not a bool", "SEP10_TRUST_PROXY_HEADERS", "yes please"},
 		{"home domains empty after trim", "SEP10_HOME_DOMAINS", " , "},
 	}
 

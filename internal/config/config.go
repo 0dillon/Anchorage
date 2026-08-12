@@ -42,6 +42,8 @@ type Config struct {
 	DatabaseURL string
 	ListenAddr  string
 	TOMLPath    string
+
+	TrustProxyHeaders bool
 }
 
 // Load reads configuration through getenv and validates all of it. The error
@@ -131,6 +133,10 @@ func Load(getenv func(string) string) (*Config, error) {
 	}
 
 	if cfg.TOMLPath, err = required(getenv, "SEP10_TOML_PATH"); err != nil {
+		return nil, err
+	}
+
+	if cfg.TrustProxyHeaders, err = boolean(getenv, "SEP10_TRUST_PROXY_HEADERS", false); err != nil {
 		return nil, err
 	}
 
