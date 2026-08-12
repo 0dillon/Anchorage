@@ -1,0 +1,12 @@
+# SEP-1 stellar.toml. The SIGNING_KEY placeholder is replaced at startup with
+# the public key derived from SEP10_SIGNING_SECRET, so this file can never
+# publish a key the server cannot sign with.
+VERSION = "2.0.0"
+
+NETWORK_PASSPHRASE = "Test SDF Network ; September 2015"
+WEB_AUTH_ENDPOINT = "https://auth.example.com/auth"
+SIGNING_KEY = "${SIGNING_KEY}"
+
+[DOCUMENTATION]
+ORG_NAME = "Example"
+ORG_URL = "https://example.com"

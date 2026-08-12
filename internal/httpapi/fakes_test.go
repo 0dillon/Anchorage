@@ -166,6 +166,8 @@ func newTestDeps(t *testing.T) (Deps, *fakeStore) {
 		NetworkPassphrase: testNetwork,
 		WebAuthDomain:     testWebAuthDomain,
 		HomeDomains:       []string{testHomeDomain},
+		TOMLPath:          writeTOML(t, "VERSION = \"2.0.0\"\nSIGNING_KEY = \"${SIGNING_KEY}\"\n"),
+		SigningPublicKey:  serverKP.Address(),
 	}, fake
 }
 

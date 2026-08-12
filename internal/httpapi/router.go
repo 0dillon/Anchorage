@@ -98,6 +98,17 @@ func NewRouter(d Deps) (http.Handler, error) {
 	if d.NetworkPassphrase == "" {
 		return nil, fmt.Errorf("a network passphrase is required")
 	}
+	if d.TOMLPath == "" {
+		return nil, fmt.Errorf("a SEP-1 toml path is required")
+	}
+	if d.SigningPublicKey == "" {
+		return nil, fmt.Errorf("a signing public key is required")
+	}
+
+	tomlBody, err := loadTOML(d.TOMLPath, d.SigningPublicKey)
+	if err != nil {
+		return nil, err
+	}
 
 	limiter := newRateLimiter(requestsPerMinute)
 
@@ -121,6 +132,7 @@ func NewRouter(d Deps) (http.Handler, error) {
 	r.Get("/health", healthHandler(d.Health, d.Logger))
 	r.Get("/auth", getAuthHandler(d))
 	r.Post("/auth", postAuthHandler(d))
+	r.Get("/.well-known/stellar.toml", tomlHandler(tomlBody, d.Logger))
 
 	return r, nil
 }
