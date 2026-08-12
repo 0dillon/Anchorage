@@ -3294,6 +3294,7 @@ package clientdomain
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -3450,6 +3451,45 @@ func TestResolveEnforcesAllowlist(t *testing.T) {
 	require.Equal(t, 1, *calls)
 }
 
+// The cache is bounded. Distinct domains cost a caller nothing to generate, so
+// an unbounded map would grow for as long as it kept asking.
+func TestResolveCacheIsBounded(t *testing.T) {
+	r, calls := newTestResolver(t, time.Minute, tomlHandler(
+		"SIGNING_KEY=\""+signingKey+"\"\n"))
+
+	for i := range maxCacheEntries + 10 {
+		_, err := r.Resolve(context.Background(), fmt.Sprintf("d%d.example.org", i))
+		require.NoError(t, err)
+	}
+
+	r.mu.Lock()
+	size := len(r.cache)
+	r.mu.Unlock()
+
+	require.LessOrEqual(t, size, maxCacheEntries)
+	// Every domain was distinct, so every one was fetched and none was served
+	// from the cache.
+	require.Equal(t, maxCacheEntries+10, *calls)
+}
+
+// An expired entry is dropped on the next write rather than kept for the life of
+// the process.
+func TestResolvePurgesExpiredEntries(t *testing.T) {
+	r, _ := newTestResolver(t, time.Nanosecond, tomlHandler(
+		"SIGNING_KEY=\""+signingKey+"\"\n"))
+
+	_, err := r.Resolve(context.Background(), "first.example.org")
+	require.NoError(t, err)
+	_, err = r.Resolve(context.Background(), "second.example.org")
+	require.NoError(t, err)
+
+	r.mu.Lock()
+	_, firstStillCached := r.cache["first.example.org"]
+	r.mu.Unlock()
+
+	require.False(t, firstStillCached, "an expired entry must be purged on the next write")
+}
+
 func TestResolveRejectsEmptyDomain(t *testing.T) {
 	r, calls := newTestResolver(t, time.Minute, tomlHandler(""))
 
@@ -3538,6 +3578,11 @@ const (
 	maxRedirects = 3
 	// fetchTimeout bounds the whole request, including redirects.
 	fetchTimeout = 5 * time.Second
+	// maxCacheEntries caps the cache. A domain is caller-supplied input and
+	// wildcard DNS makes distinct domains free to generate, so an unbounded map
+	// would grow for as long as a caller kept feeding it new names. A full cache
+	// is not a correctness problem: an uncached domain is simply refetched.
+	maxCacheEntries = 1024
 )
 
 // ResolverConfig configures a Resolver.
@@ -3584,9 +3629,16 @@ func NewResolver(cfg ResolverConfig) *Resolver {
 	if client == nil {
 		client = &http.Client{Timeout: fetchTimeout}
 	}
-	// The policy is applied whether or not the caller supplied the client, so
-	// a caller cannot hand in a client that follows redirects to plain HTTP.
-	client.CheckRedirect = checkRedirect
+	// The policy is applied whether or not the caller supplied the client, so a
+	// caller cannot hand in a client that follows redirects to plain HTTP. The
+	// client is copied before the policy is set: assigning CheckRedirect on the
+	// caller's own client would change how that client behaves everywhere else
+	// it is used, and a caller passing http.DefaultClient would change it for
+	// the whole process. The copy shares the Transport, so the connection pool
+	// is still shared.
+	policed := *client
+	policed.CheckRedirect = checkRedirect
+	client = &policed
 
 	return &Resolver{
 		allowlist: allowlist,
@@ -3635,11 +3687,29 @@ func (r *Resolver) Resolve(ctx context.Context, domain string) (string, error) {
 		return "", err
 	}
 
-	r.mu.Lock()
-	r.cache[domain] = cacheEntry{signingKey: key, expiresAt: time.Now().Add(r.ttl)}
-	r.mu.Unlock()
+	r.store(domain, key)
 
 	return key, nil
+}
+
+// store caches a resolved key. Expired entries are dropped first, so the map
+// does not keep every domain ever asked about. If the cache is still full the
+// new entry is not stored: that costs a refetch next time and never evicts a
+// live entry to make room.
+func (r *Resolver) store(domain, key string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	now := time.Now()
+	for cached, entry := range r.cache {
+		if !now.Before(entry.expiresAt) {
+			delete(r.cache, cached)
+		}
+	}
+	if len(r.cache) >= maxCacheEntries {
+		return
+	}
+	r.cache[domain] = cacheEntry{signingKey: key, expiresAt: now.Add(r.ttl)}
 }
 
 // cached returns a live cache entry, if there is one.
