@@ -2562,6 +2562,21 @@ func TestIssueClientDomainResolutionFailure(t *testing.T) {
 	require.ErrorIs(t, err, ErrClientDomainRejected)
 }
 
+func TestIssueClientDomainResolvesToEmptyKey(t *testing.T) {
+	// A resolver that returns ("", nil) reports success but gives nothing to
+	// bind the challenge to. That must be rejected, not silently downgraded to
+	// a challenge without a client_domain operation.
+	resolver := &fakeResolver{key: ""}
+
+	issuer := testIssuer(t, resolver, false)
+
+	_, err := issuer.Issue(context.Background(), IssueRequest{
+		Account:      clientKP.Address(),
+		ClientDomain: testClientDomain,
+	})
+	require.ErrorIs(t, err, ErrClientDomainRejected)
+}
+
 func TestIssueClientDomainRequiredButAbsent(t *testing.T) {
 	issuer := testIssuer(t, &fakeResolver{key: clientDomainKP.Address()}, true)
 
@@ -2726,6 +2741,14 @@ func (i *Issuer) Issue(ctx context.Context, req IssueRequest) (*IssuedChallenge,
 		key, err := i.cfg.Resolver.Resolve(ctx, req.ClientDomain)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %s: %s", ErrClientDomainRejected, req.ClientDomain, err)
+		}
+		if key == "" {
+			// A resolver that returns no error must return a key. If it returns
+			// neither, that is a bug in the resolver, and the wrong way to absorb
+			// it is to issue a challenge that silently drops the client_domain
+			// operation: IssuedChallenge.ClientDomain would still say the domain
+			// was bound when the signed transaction does not carry that binding.
+			return nil, fmt.Errorf("%w: %s: resolver returned no signing key", ErrClientDomainRejected, req.ClientDomain)
 		}
 		clientDomainKey = key
 	} else if i.cfg.ClientDomainRequired {
