@@ -119,6 +119,14 @@ func (i *Issuer) Issue(ctx context.Context, req IssueRequest) (*IssuedChallenge,
 		if err != nil {
 			return nil, fmt.Errorf("%w: %s: %s", ErrClientDomainRejected, req.ClientDomain, err)
 		}
+		if key == "" {
+			// A resolver that returns no error must return a key. If it returns
+			// neither, that is a bug in the resolver, and the wrong way to absorb
+			// it is to issue a challenge that silently drops the client_domain
+			// operation: IssuedChallenge.ClientDomain would still say the domain
+			// was bound when the signed transaction does not carry that binding.
+			return nil, fmt.Errorf("%w: %s: resolver returned no signing key", ErrClientDomainRejected, req.ClientDomain)
+		}
 		clientDomainKey = key
 	} else if i.cfg.ClientDomainRequired {
 		return nil, fmt.Errorf("%w: this server requires a client_domain", ErrClientDomainRequired)

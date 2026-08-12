@@ -159,6 +159,21 @@ func TestIssueClientDomainResolutionFailure(t *testing.T) {
 	require.ErrorIs(t, err, ErrClientDomainRejected)
 }
 
+func TestIssueClientDomainResolvesToEmptyKey(t *testing.T) {
+	// A resolver that returns ("", nil) reports success but gives nothing to
+	// bind the challenge to. That must be rejected, not silently downgraded to
+	// a challenge without a client_domain operation.
+	resolver := &fakeResolver{key: ""}
+
+	issuer := testIssuer(t, resolver, false)
+
+	_, err := issuer.Issue(context.Background(), IssueRequest{
+		Account:      clientKP.Address(),
+		ClientDomain: testClientDomain,
+	})
+	require.ErrorIs(t, err, ErrClientDomainRejected)
+}
+
 func TestIssueClientDomainRequiredButAbsent(t *testing.T) {
 	issuer := testIssuer(t, &fakeResolver{key: clientDomainKP.Address()}, true)
 
