@@ -4916,14 +4916,29 @@ Expected: PASS — the Task 15 tests. No integration test runs.
 The forbidden dependency can only appear once something imports a migrate driver, which is now.
 
 Run: `go list -deps ./... | grep lib/pq`
-Expected: no output, exit status 1. If `lib/pq` appears, the `database/postgres` driver was
-imported instead of `database/pgx/v5`.
+Expected: no output, exit status 1. If `lib/pq` appears here, the `database/postgres` driver was
+imported instead of `database/pgx/v5`. This command is the authoritative check, because it lists
+what the build actually links.
+
+The Global Constraints also require `grep -c "lib/pq" go.sum` to print `0`, and that check is
+weaker than it looks from this task onward. `golang-migrate`'s own `go.mod` requires `lib/pq` for
+the driver Anchorage does not use, so `go mod tidy` may record a `github.com/lib/pq vX.Y.Z/go.mod`
+hash line for module-graph bookkeeping even though nothing links it. A `/go.mod` line alone is not
+a violation; an `h1:` line for `lib/pq`, which is the hash of the module's source, means it really
+is in the build.
+
+If `go list -deps` is clean but `go.sum` gains a `lib/pq` `/go.mod` line, stop and report it rather
+than acting. Never hand-edit `go.sum`, and never relax either check to get a green run.
 
 - [ ] **Step 6: Commit**
 
+This task is the first real import of `pgx/v5` and `golang-migrate/v4`, so `go mod tidy` changes
+`go.mod` and `go.sum`. Both are staged with this task's own files: leaving them out would push a
+tree whose `go.mod` does not require what the code imports, and CI would fail on a fresh checkout.
+
 ```bash
 make check
-git add internal/store/postgres.go internal/store/postgres_integration_test.go
+git add go.mod go.sum internal/store/postgres.go internal/store/postgres_integration_test.go
 git commit -m "feat(store): add postgres implementation and cleanup loop"
 git push
 ```
