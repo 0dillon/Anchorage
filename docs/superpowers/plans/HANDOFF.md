@@ -1,13 +1,13 @@
 # Anchorage — handoff
 
-State as of commit `dbf37e9`, branch `main`, pushed. Working tree clean, `make check` green.
+State as of commit `d1cc5a3`, branch `main`, pushed. Working tree clean, `make check` green.
 
 Plan: `docs/superpowers/plans/2026-08-10-sep10-auth-server.md` (23 tasks).
 Execution ledger with full per-task detail: `.superpowers/sdd/progress.md` (git-ignored).
 
 ## Complete and reviewed
 
-Tasks 1-10. Each passed a spec-compliance and a code-quality verdict.
+Tasks 1-11. Each passed a spec-compliance and a code-quality verdict.
 
 | # | Task | Commit |
 |---|------|--------|
@@ -21,17 +21,11 @@ Tasks 1-10. Each passed a spec-compliance and a code-quality verdict.
 | 8 | SEP-10 challenge reader | `96ac6e7`, `55f944c`, `8708a6a` |
 | 9 | Differential test against the SDK | `d0ac49b` |
 | 10 | Signature and threshold verification | `facded4` |
-
-## Implemented but NOT reviewed
-
-**Task 11, challenge issuance, commit `dbf37e9`.** The code is written, committed and pushed,
-and the suite is green, but the review gate never ran. It is the one gap in the chain. Run the
-Task 11 review before starting Task 12, using
-`.superpowers/sdd/task-11-brief.md` and `.superpowers/sdd/task-11-report.md`.
+| 11 | Challenge issuance | `dbf37e9`, `d1cc5a3` |
 
 ## Next
 
-Task 12, `internal/account` — the Horizon account fetcher. Its brief has not been generated yet.
+Task 12, `internal/account` — the Horizon account fetcher.
 
 ## Open findings not recorded in the plan
 
@@ -39,6 +33,14 @@ Task 12, `internal/account` — the Horizon account fetcher. Its brief has not b
 failure as `fmt.Errorf("%w: %s", ErrAccountLookupFailed, err)`, interpolating whatever the
 fetcher returned. That is by design, so the production fetcher in Task 12 is responsible for not
 putting a raw Horizon response body into its error. Flagged as Minor during the Task 10 review.
+The same applies to the client domain resolver in Task 13, whose error is flattened into
+`ErrClientDomainRejected` with `%s`. Neither may carry an upstream response body — status code
+and a fixed description only.
+
+**A resolver must never return an empty signing key without an error.** `Issue` now rejects that
+case with `ErrClientDomainRejected` (commit `d1cc5a3`), because silently issuing a challenge
+that is not bound to the wallet is the wrong way to absorb a resolver bug. Task 13's resolver
+must also error rather than return `("", nil)`.
 
 **Two deliberate divergences from the SDK.** Anchorage rejects duplicate `client_domain` and
 duplicate `web_auth_domain` operations; `txnbuild.ReadChallengeTx` accepts them. It also reads
