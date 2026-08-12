@@ -1,0 +1,39 @@
+name: anchorage
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: anchorage
+      POSTGRES_PASSWORD: anchorage
+      POSTGRES_DB: anchorage
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U anchorage"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  authd:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    # Secrets come from a local .env, which is git-ignored. The credentials
+    # below are for a throwaway local database and nothing else.
+    env_file:
+      - ../.env
+    environment:
+      SEP10_DATABASE_URL: postgres://anchorage:anchorage@postgres:5432/anchorage?sslmode=disable
+      SEP10_LISTEN_ADDR: ":8080"
+      SEP10_TOML_PATH: /etc/anchorage/stellar.toml
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
