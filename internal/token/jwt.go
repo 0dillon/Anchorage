@@ -138,3 +138,8 @@ func Subject(account string, memo *uint64) string {
 	}
 	return account + ":" + strconv.FormatUint(*memo, 10)
 }
+
+// Lifetime returns how long an issued token is valid.
+func (i *Issuer) Lifetime() time.Duration {
+	return i.cfg.Lifetime
+}

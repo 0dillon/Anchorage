@@ -83,6 +83,21 @@ func NewRouter(d Deps) (http.Handler, error) {
 	if d.Challenges == nil {
 		return nil, fmt.Errorf("a challenge store is required")
 	}
+	if d.Tokens == nil {
+		return nil, fmt.Errorf("a token issuer is required")
+	}
+	if d.Accounts == nil {
+		return nil, fmt.Errorf("an account fetcher is required")
+	}
+	if d.WebAuthDomain == "" {
+		return nil, fmt.Errorf("a web auth domain is required")
+	}
+	if len(d.HomeDomains) == 0 {
+		return nil, fmt.Errorf("at least one home domain is required")
+	}
+	if d.NetworkPassphrase == "" {
+		return nil, fmt.Errorf("a network passphrase is required")
+	}
 
 	limiter := newRateLimiter(requestsPerMinute)
 
@@ -105,6 +120,7 @@ func NewRouter(d Deps) (http.Handler, error) {
 
 	r.Get("/health", healthHandler(d.Health, d.Logger))
 	r.Get("/auth", getAuthHandler(d))
+	r.Post("/auth", postAuthHandler(d))
 
 	return r, nil
 }

@@ -154,13 +154,30 @@ func newTestDeps(t *testing.T) (Deps, *fakeStore) {
 	fake := newFakeStore()
 
 	return Deps{
-		Logger:            discardLogger(),
-		Issuer:            testIssuer(t, fakeResolver{key: clientDomainKP.Address()}),
-		Tokens:            tokens,
-		Challenges:        fake,
-		Health:            fakePinger{},
+		Logger:     discardLogger(),
+		Issuer:     testIssuer(t, fakeResolver{key: clientDomainKP.Address()}),
+		Tokens:     tokens,
+		Challenges: fake,
+		Health:     fakePinger{},
+		Accounts: fakeAccounts{account: &auth.Account{
+			Signers:      map[string]int32{clientKP.Address(): 1},
+			MedThreshold: 1,
+		}},
 		NetworkPassphrase: testNetwork,
 		WebAuthDomain:     testWebAuthDomain,
 		HomeDomains:       []string{testHomeDomain},
 	}, fake
+}
+
+// fakeAccounts stands in for Horizon.
+type fakeAccounts struct {
+	account *auth.Account
+	err     error
+}
+
+func (f fakeAccounts) Account(context.Context, string) (*auth.Account, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.account, nil
 }

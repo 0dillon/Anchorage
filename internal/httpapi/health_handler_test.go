@@ -60,6 +60,11 @@ func TestNewRouterRequiresDependencies(t *testing.T) {
 		{"no health pinger", func(d *Deps) { d.Health = nil }},
 		{"no issuer", func(d *Deps) { d.Issuer = nil }},
 		{"no challenge store", func(d *Deps) { d.Challenges = nil }},
+		{"no token issuer", func(d *Deps) { d.Tokens = nil }},
+		{"no account fetcher", func(d *Deps) { d.Accounts = nil }},
+		{"no web auth domain", func(d *Deps) { d.WebAuthDomain = "" }},
+		{"no home domains", func(d *Deps) { d.HomeDomains = nil }},
+		{"no network passphrase", func(d *Deps) { d.NetworkPassphrase = "" }},
 	}
 
 	for _, tt := range tests {
