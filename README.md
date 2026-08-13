@@ -107,7 +107,6 @@ Stated plainly, because they affect how you deploy this.
 
 **The TOML resolver fetches attacker-named domains by design** — that is what `client_domain` means. It enforces HTTPS only, a 5 second timeout, a 3 hop redirect cap, a 100 KB body cap, and deliberately uninformative errors. Private-IP blocking is not implemented; if you run this where internal hosts are reachable, put it behind an egress policy.
 
-**This service is unaudited.** Review it before running it in front of anything that matters.
 
 ## Repository layout
 
