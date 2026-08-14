@@ -82,7 +82,7 @@ func (p *Postgres) RecordChallenge(ctx context.Context, rec ChallengeRecord) err
 
 	_, err := p.pool.Exec(ctx, query,
 		rec.Nonce, rec.Account, rec.HomeDomain,
-		nullable(rec.ClientDomain), rec.IssuedAt, rec.ExpiresAt)
+		rec.ClientDomain, rec.IssuedAt, rec.ExpiresAt)
 	if err != nil {
 		return fmt.Errorf("recording challenge: %w", err)
 	}
@@ -104,16 +104,10 @@ func (p *Postgres) ConsumeChallenge(ctx context.Context, nonce string, now time.
 		WHERE nonce = $1 AND consumed_at IS NULL AND expires_at >= $2
 		RETURNING account, home_domain, client_domain`
 
-	var (
-		out          ConsumedChallenge
-		clientDomain *string
-	)
+	var out ConsumedChallenge
 	err := p.pool.QueryRow(ctx, consume, nonce, now).
-		Scan(&out.Account, &out.HomeDomain, &clientDomain)
+		Scan(&out.Account, &out.HomeDomain, &out.ClientDomain)
 	if err == nil {
-		if clientDomain != nil {
-			out.ClientDomain = *clientDomain
-		}
 		return &out, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
@@ -160,8 +154,8 @@ func (p *Postgres) RecordSession(ctx context.Context, rec SessionRecord) error {
 		VALUES ($1, $2, $3, $4, $5, $6, $7)`
 
 	_, err := p.pool.Exec(ctx, query,
-		rec.JTI, rec.Account, nullable(rec.Memo), rec.HomeDomain,
-		nullable(rec.ClientDomain), rec.IssuedAt, rec.ExpiresAt)
+		rec.JTI, rec.Account, rec.Memo, rec.HomeDomain,
+		rec.ClientDomain, rec.IssuedAt, rec.ExpiresAt)
 	if err != nil {
 		return fmt.Errorf("recording session: %w", err)
 	}
@@ -208,13 +202,4 @@ func (p *Postgres) CleanupExpiredChallenges(ctx context.Context, interval time.D
 			}
 		}
 	}
-}
-
-// nullable maps an empty string to SQL NULL, so an absent client domain is
-// stored as NULL rather than as an empty string.
-func nullable(s string) *string {
-	if s == "" {
-		return nil
-	}
-	return &s
 }
