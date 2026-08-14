@@ -65,10 +65,17 @@ func TestMigrationsAreEmbedded(t *testing.T) {
 	require.ElementsMatch(t, []string{
 		"migrations/000001_init.up.sql",
 		"migrations/000001_init.down.sql",
+		"migrations/000002_not_null_text_columns.up.sql",
+		"migrations/000002_not_null_text_columns.down.sql",
 	}, entries)
 
 	up, err := fs.ReadFile(migrationsFS, "migrations/000001_init.up.sql")
 	require.NoError(t, err)
 	require.Contains(t, string(up), "CREATE TABLE challenges")
 	require.Contains(t, string(up), "CREATE TABLE sessions")
+
+	notNull, err := fs.ReadFile(migrationsFS, "migrations/000002_not_null_text_columns.up.sql")
+	require.NoError(t, err)
+	require.Contains(t, string(notNull), "client_domain SET NOT NULL")
+	require.Contains(t, string(notNull), "memo SET NOT NULL")
 }
