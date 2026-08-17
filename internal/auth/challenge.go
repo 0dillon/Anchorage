@@ -117,7 +117,7 @@ func (i *Issuer) Issue(ctx context.Context, req IssueRequest) (*IssuedChallenge,
 	if req.ClientDomain != "" {
 		key, err := i.cfg.Resolver.Resolve(ctx, req.ClientDomain)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %s: %s", ErrClientDomainRejected, req.ClientDomain, err)
+			return nil, fmt.Errorf("%w: %s: %w", ErrClientDomainRejected, req.ClientDomain, err)
 		}
 		if key == "" {
 			// A resolver that returns no error must return a key. If it returns
