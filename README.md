@@ -23,7 +23,7 @@ Python has django-polaris. PHP has the Argo Navis SDK. Java has SDF's Anchor Pla
 
 Anchorage is that server.
 
-**What it is not:** an anchor, a KYC system, or a deposit and withdrawal implementation. It is the authentication layer those things are built on, and nothing else. That boundary is deliberate.
+**What it is not:** an anchor, a KYC system, or a deposit and withdrawal implementation. It is the authentication layer those things are built on. 
 
 ## Why the SDK is not enough
 
